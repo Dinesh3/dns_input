@@ -1,0 +1,177 @@
+### Script created by Wes Logan, DNS Transformation Project, 13th September 2022
+### Script replaces existing DNS record creation and deletion scripts used by DXC.Technology
+### which relied on the old dnscmd.exe executable, and was only used for creating 
+### A records and CNAME records
+### This script must be run from a Windows 10 (or newer) Workstation OS or a Windows Server 2016 (or newer) OS
+### where that system has the RSAT DNS Tools (Workstation OS) or DNS Server Tools Feature (Server OS) installed.
+### Additionally the account the script is run under must have Admin rights on the destination server to manage
+### the DNS zones hosted on it.
+
+# Location and Name of input CSV file
+$RecordUpdates = Import-CSV "D:\DNSUpdates.csv"
+
+# Variable used for output Report file name
+$OutputFileDate = get-date -f "yyyyMMdd-HHmm"
+
+# Location of Output Report file (Output file name will be in the format of <Destination Server Name>_DNSUpdates_SOA-<Below Entered SOA Serial Number>_<YYYYMMDD-HHmm>.csv
+$ReportFilePath = "D:\temp"
+
+
+
+# Requests user to provide the new SOA Serial Number that will be applied to all affected DNS Zones
+# Note - Depending on number of subsequent updates to the same zone by this script, the initially 
+# 		 entererd SOA Serial will be automatically incremented by each additional DNS record update
+Function Get-NewSOASerialNumber {
+    Write-Host "Please enter the new SOA Serial Number that will be applied to all updated DNS Zones"
+    Write-Host 'Please enter todays date in format "YYYYMMDDxx" where xx is the next consecutive number start with 01 for today'
+    Write-Host "Example - 2022072101"
+    [string]$NewSOASerialNumber = Read-Host
+    $NewSOASerialNumber
+    }
+
+$NewSOASerialNumber = Get-NewSOASerialNumber
+
+# Set / Update SOA record
+Function Set-NewSOA ($Record, $NewSOASerialNumber) {
+    If ($Record.RRType -like 'PrimaryZone') {
+        $ExistingZoneSOA = Get-DNSServerResourceRecord -ComputerName $Record.Server -ZoneName $Record.Name -Name "@" -RRType SOA
+        }
+    else {
+        if ($Record.RRType -notlike "SecondaryZone" -and $Record.RRType -notlike "Delegation" -and $Record.RRType -notlike "Conditional"){
+            $ExistingZoneSOA = Get-DNSServerResourceRecord -ComputerName $Record.Server -ZoneName $Record.Zone -Name "@" -RRType SOA
+            }
+        }
+    $NewSOA = $Null
+    $NewSOA = $ExistingZoneSOA.clone()
+    $NewSOA.RecordData.SerialNumber = $NewSOASerialNumber
+    If ($Record.RRType -like 'PrimaryZone') {
+        Set-DNSServerResourceRecord -ComputerName $Record.Server -ZoneName $Record.Name -OldInputObject $ExistingZoneSOA -NewInputObject $NewSOA
+        }
+    else {
+        if ($Record.RRType -notlike "SecondaryZone" -and $Record.RRType -notlike "Delegation" -and $Record.RRType -notlike "Conditional"){
+            Set-DNSServerResourceRecord -ComputerName $Record.Server -ZoneName $Record.Zone -OldInputObject $ExistingZoneSOA -NewInputObject $NewSOA
+            }
+        }
+    }
+
+# Test the record to confirm if it exists or not
+Function Test-Record ($Record) {
+    if ($Record.RRType -like 'Reverse') {
+        $Check = Resolve-DnsName -Name "$($Record.Zone)." -Server $Record.Server
+        }
+    else {
+        If ($Record.RRType -like 'PrimaryZone' -or $Record.RRType -like 'SecondaryZone' -or $Record.RRType -like 'Delegation' -or $Record.RRType -like 'Conditional') {
+            Write-Host "Test Zone resolution -Name $_.Name -Server $Record.Server -Type ANY"
+            $Check = Resolve-DnsName -Name "$($Record.Name).$($Record.Zone)" -Server $Record.Server -Type SOA
+            }
+        else {
+            #if ($Record.RRType -eq 'A' -or $Record.RRType -eq 'AAAA' -or $Record.RRType -eq 'CNAME' -or $Record.RRType -eq 'PTR' -or $Record.RRType -eq 'MX') {
+                $Check = Resolve-DnsName -Name "$($Record.Name).$($Record.Zone)." -Server $Record.Server -Type $Record.RRType
+             #   }
+            }
+        }
+    
+    Return $Check
+    }
+
+# Generate Output file for required test.
+Function Generate-Report ($Record, $Test, $NewSOASerialNumber) {
+    $Report = [PSCustomOBject][Ordered]@{
+        "DNSRecordName" = $Record.Name;
+        "RecordType" = $Record.RRType;
+        "Zone" =  $Record.Zone
+        "DNSServer" = $Record.Server
+        "TestResult" = ($Check | Format-List | out-string).trim()
+        }
+    $Report | Export-CSV "$reportFilePath\$($Record.Server)_DNSUpdates_SOA-$($NewSOASerialNumber)_$($OutputFileDate).csv" -Append -NoClobber -NoTypeInformation -Encoding UTF8
+    }
+
+# Perform removal of any records required as per the input file
+Foreach ($Record in $RecordUpdates | Where-Object {$_.Action -like "Remove" -or $_.Action -like "Delete"}) {
+    if ($Record.RRType -like "SecondaryZone" -or $Record.RRType -like "PrimaryZone" -or $Record.RRType -like "Conditional" -or $Record.RRType -like "Reverse" -or $Record.RRType -like "Delegation") {
+        Remove-DnsServerZone -Name $Record.Name -ComputerName $Record.Server -Confirm:$false -force -PassThru
+        }
+    else {
+        Remove-DnsServerResourceRecord -Name $Record.Name -RRType $Record.RRType -ZoneName $Record.Zone -RecordData $Record.RRData -ComputerName $Record.Server -confirm:$False -Force -PassThru -verbose
+        Set-NewSOA $Record $NewSOASerialNumber
+        }
+    $Check = Test-Record $Record
+    Generate-Report $Record $Check $NewSOASerialNumber
+    }
+
+# Perform creation of any records required as per the input file
+Foreach ($Record in $RecordUpdates | Where-Object {$_.Action -like "Add" -or $_.Action -like "Update" -or $_.Action -like "Modify"}) {
+    Write-Host $Record.Action $Record.Name
+    if ($Record.RRType -like "PrimaryZone") {
+        Add-DnsServerPrimaryZone -Name $Record.Name -ZoneFile "$($Record.Zone).dns" -ComputerName $Record.Server -PassThru
+        Set-DnsServerPrimaryZone -Name $Record.Name -SecureSecondaries TransferToSecureServers -SecondaryServers $Record.SecondaryServers -Notify NotifyServers -NotifyServers $Record.NotifyServers -PassThru
+        }
+    else {
+        if ($Record.RRType -like "SecondaryZone") {
+            Add-DnsServerSecondaryZone -Name $Record.Name -ZoneFile "$($Record.Name).dns" $Record.MasterServers -ComputerName $Record.Server -PassThru
+            Sync-DnsServerZone -Name $Record.Name -ComputerName $Record.Server -PassThru
+            }
+        else {
+            if ($Record.RRType -like "Conditional") {
+            	Add-DnsServerConditionalForwarderZone -Name $Record.Name -MasterServers $Record.MasterServers -ComputerName $Record.Server -PassThru
+                }
+            else {
+            	if ($Record.RRType -like 'Delegation') {
+                	Add-DnsServerZoneDelegation -Name $Record.Zone -ChildZoneName $Record.Name -NameServer $Record.MasterServers -IPAddress $Record.RRData -ComputerName $Record.Server -PassThru
+                	}
+            	else {
+            		if ($Record.RRType -like 'Reverse') {
+                		Add-DnsServerZoneDelegation -NetworkID $Record.Name -ZoneFile $Record.Zone -ComputerName $Record.Server -PassThru
+	                	}
+    	        	else {
+        	    		if ($Record.RRType -eq 'A') {
+            	    		Add-DnsServerResourceRecordA -Name $Record.Name -IPv4Address $Record.RRData -ZoneName $Record.Zone -ComputerName $Record.Server -PassThru
+	            	    	}
+    	        		else {
+        	        		if ($Record.RRType -eq 'AAAA') {
+            	        		Add-DnsServerResourceRecordAAAA -Name $Record.Name -IPv6Address $Record.RRData -ZoneName $Record.Zone -ComputerName $Record.Server -PassThru
+		            	        }
+    		            	else {
+        		            	if ($Record.RRType -eq "CNAME") {
+            		            	Add-DnsServerResourceRecordCName -HostNameAlias $Record.RRData -Name $Record.Name -ZoneName $Record.Zone -ComputerName $Record.Server -PassThru
+	            	    	        }
+    	            	    	else {
+        	            	    	if ($Record.RRType -eq "MX") {
+            	            	    	Add-DnsServerResourceRecordMX -Name $Record.Name -MailExchange $Record.RRData -Preference $Record.MXPreference -ZoneName $Record.Zone -ComputerName $Record.Server -PassThru
+	            	            	    }
+    	            	        	else {
+        	            	    	    if ($Record.RRType -eq "PTR") {
+            	            	    	    Add-DnsServerResourceRecordPTR -Name $Record.Name -PtrDomainName $Record.RRData -ZoneName $Record.Zone -ComputerName $Record.Server -PassThru
+                	            	    	}
+		                    	        else {
+    		                                if ($Record.RRType -eq "NS") {
+        		    	                    	Add-DnsServerResourceRecord -NS -Name $Record.Name -NameServer $Record.RRData -ZoneName $Record.Zone -ComputerName $Record.Server -PassThru
+            		    	                	}
+                		    	        	else {
+                    		                	if ($Record.RRType -eq "SRV") {
+            	        		            		Add-DnsServerResourceRecord -SRV -Name $Record.Name -ZoneName $Record.Zone -DomainName $Record.RRData -Weight $Record.SRVWeight -Priority $Record.SRVPriority -Port $Record.SRVPort -ComputerName $Record.Server -PassThru
+                	        		        		}
+                    	        				else {
+            										if ($Record.RRType -eq 'SOA') {
+                										Add-DnsServerResourceRecord -SOA -Name $Record.Name -IPv4Address $Record.RRData -ZoneName $Record.Zone -ComputerName $Record.Server -PassThru
+                										}
+	            									else {
+    	                                				Add-DnsServerResourceRecord -ZoneName $Record.Zone -Name $Record.Name -RRType $Record.RRType -RecordData $Record.RecordData -ComputerName $Record.Server -PassThru
+														}
+													}
+												}
+											}
+										}
+                					}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }  
+    
+    Set-NewSOA $Record $NewSOASerialNumber
+    $Check = Test-Record $Record
+    Generate-Report $Record $Check $NewSOASerialNumber
+    }
