@@ -1,0 +1,154 @@
+<html xmlns="http://www.w3.org/1999/html">
+<head>
+    {% include 'header.html' %}
+</head>
+<body>
+<div class="container">
+        <form action="http://localhost:5000/result" method="POST" class="row g-3 needs-validation" validate>
+          <!--  <form class="row g-3 needs-validation" validate>-->
+            <div class="col-md-4 position-relative">
+                <label for="validationTooltip04" class="form-label">DNS Type</label>
+                <select name="DNS Type" class="form-select" id="validationTooltip01" required>
+                    <option selected disabled value="">Choose...</option>
+                    <option>Internal DNS</option>
+                    <option>External DNS</option>
+                </select>
+            </div>
+            <div class="col-md-4 position-relative">
+                <label for="validationTooltip04" class="form-label">DNS Record Type</label>
+                <select onchange="handleDnsRecord(event)" name ="DNS Record Type" class="form-select" id="validationTooltip02" required>
+                    <option selected disabled value="">Choose...</option>
+                    <option>A Record</option>
+                    <option>AAAA Record</option>
+                    <option>CNAME Record</option>
+                    <option>TXT Record</option>
+                    <option>SRV Record</option>
+                    <!--<option value="SRV"><a href="/templates/header.html">SRV Record</a></option>-->
+                </select>
+            </div>
+            
+            <div class="col-md-4 position-relative">
+                <label for="validationTooltip04" class="form-label">Action</label>
+                <select name ="Action" class="form-select" required aria-label="select example">
+                    <!--<select class="form-select" id="validationTooltip03" required>-->
+                    <option selected disabled value="">Choose...</option>
+                    <option>Create</option>
+                    <option>Delete</option>
+                    <option>Modify</option>
+                </select>
+            </div>
+            <!-- dns -->
+            <div class="col-md-4 ">
+                <label for="validationTooltip01" class="form-label">DNS Record Name</label>
+                <input type="text" name ="DNS Record Name" class="form-control" id="validationTooltip04" value="" required>
+                <div class="valid-tooltip">
+                    Looks good!
+                </div>
+            </div>
+            <div class="col-md-4 position-relative" id="ip-address-section">
+                <label for="validationTooltip04" class="form-label">Ip Address</label>
+               <input type="text" class="form-control">
+            </div>
+            <!-- srv fields -->
+            <div class="col-md-4 position-relative srv-sections" id="port-no-section">
+                <label for="validationTooltip04" class="form-label">Port No</label>
+                <input type="text" name="Port No" class="form-control">
+            </div>
+            <div  class="col-md-4 position-relative srv-sections">
+                <label for="validationTooltip04" class="form-label">Priority</label>
+                <input type="text" name="Priority" class="form-control">
+            </div>
+            <!-- srv fields end -->
+            <div class="col-md-4 position-relative">
+                <label for="validationTooltip02" class="form-label">CNAME</label>
+                <input type="text" name="CNAME" class="form-control" id="validationTooltip05" value="" required>
+                <div class="valid-tooltip">
+                    Looks good!
+                </div>
+            </div>
+            <div class="col-md-4 position-relative">
+                <label for="validationTooltip04" class="form-label">TTL Value</label>
+                <select name="TTL Value" class="form-select" id="validationTooltip06" required>
+                    <option selected disabled value="">Choose...</option>
+                    <option>>5min</option>
+                    <option>>10min</option>
+                    <option>>30min</option>
+                </select>
+            </div>
+            <div class="col-md-4 position-relative">
+                <label for="validationTooltip04" class="form-label">Service Tier</label>
+                <select name="Service Tier" class="form-select" id="validationTooltip07" required>
+                    <option selected disabled value="">Choose...</option>
+                    <option>Production</option>
+                    <option>Non Production</option>
+                    <option>Staging</option>
+                </select>
+            </div>
+            <div class="col-md-4 position-relative">
+                <label for="validationTooltip04" class="form-label">Testing</label>
+                <select name="Testing Mode" class="form-select" id="validationTooltip08" required>
+                    <option selected disabled value="">Choose...</option>
+                    <option>Yes</option>
+                    <option>No</option>
+                </select>
+            </div>
+            <!--<div class="col-md-4 position-relative">-->
+            <label for="validationTextarea" class="form-label">Textarea</label>
+            <textarea class="form-control" id="validationTextarea" name="Description" placeholder="Required example textarea"
+                      required></textarea>
+            <div class="invalid-feedback">
+                Please enter a message in the textarea.
+            </div>
+
+            <!-- <div class="col-md-4 position-relative">-->
+            <div class="container">
+                <div class="center">
+                    <div>
+                        <button class="btn btn-primary" type="submit">Submit</button>
+                        <!-- <p><input type = "submit" value = "submit" /></p>-->
+                    </div>
+                </div>
+            </div>
+
+        </form>
+    {% include 'js_links.html' %}
+
+    <script>
+         const ipAddressElement = document.querySelector('#ip-address-section')
+        //  const portNoElement = document.querySelector('#port-no-section')
+         const srvSections = document.querySelectorAll('.srv-sections')
+
+        ipAddressElement.style.display = 'none'
+
+        // default all srv related fields will be hidden when page loads
+        srvSections.forEach((element)=>{
+            console.log('el', element);
+            element.style.display='none'
+        });
+
+        //  srvSections.style.display = 'none'
+
+        function handleDnsRecord(event) {
+            console.log('event', event);
+            console.log('elemen', event.target);
+            let dnsRecordType = event.target.value;
+            console.log('event', event.target.value);
+            if (dnsRecordType == 'A Record'){
+                srvSections.forEach((element)=>{
+                    console.log('el', element);
+                    element.style.display='none'
+                });
+                ipAddressElement.style.display='block'
+            }
+            else if (dnsRecordType == 'SRV Record'){
+                ipAddressElement.style.display='none'
+                // srvSections.style.display='block'
+                srvSections.forEach((element)=>{
+                    console.log('el', element);
+                    element.style.display='block'
+                });
+            }
+        }
+    </script>
+</body>
+</html>

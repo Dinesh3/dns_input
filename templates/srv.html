@@ -1,0 +1,42 @@
+<html xmlns="http://www.w3.org/1999/html">
+<head>
+    {% include 'header.html' %}
+</head>
+<body>
+<div class="container">
+        <form action="http://localhost:5000/result" method="POST" class="row g-3 needs-validation" validate>
+            <form class="row g-3 needs-validation" validate>
+            <div class="col-md-4 position-relative">
+                <label for="validationTooltip04" class="form-label">Environment Selection</label>
+                <select name="Environment Selection" class="form-select" id="validationTooltip01" required>
+                    <option selected disabled value="">Choose...</option>
+                    <option>Windows</option>
+                    <option>Infoblox</option>
+                </select>
+            </div>
+            <div class="col-md-4 position-relative">
+                <label for="validationTooltip04" class="form-label">Script</label>
+                <select name ="Script" class="form-select" required aria-label="select example">
+                    <!--<select class="form-select" id="validationTooltip03" required>-->
+                    <option selected disabled value="">Choose...</option>
+                    <option>Windows Powershell</option>
+                    <option>Ansible</option>
+                </select>
+            </div>
+            <div class="col-md-4 position-relative">
+                <label for="validationTooltip04" class="form-label">Action</label>
+                <select name ="Action" class="form-select" required aria-label="select example">
+                    <!--<select class="form-select" id="validationTooltip03" required>-->
+                    <option selected disabled value="">Choose...</option>
+                    <option>Create</option>
+                    <option>Delete</option>
+                </select>
+            </div>
+            <div class="col-md-4 position-relative a-record-sections" id="zone-name-section">
+                <label for="validationTooltip04" class="form-label">Search Zone Name</label>
+                <input type="text" name="Search Zone Name" class="form-control">
+             </div>
+        </div>
+    </form>
+</body>
+</html>
